@@ -164,6 +164,15 @@ def _parse(con):
         # by (month, day, hour) which is what actually matters for design days.
         if year == 0:
             year = 2026
+        # EnergyPlus writes hour=24 at the end of a design day rather than
+        # rolling to (day+1, hour=0). Roll it over so the timestamp parses.
+        if hour == 24:
+            hour = 0
+            day += 1
+            # Cheap month rollover for the design days we care about
+            if day > 31:
+                day = 1
+                month += 1
         timestamp = f"{year:04d}-{month:02d}-{day:02d}T{hour:02d}:{minute:02d}:00"
         values = bucket["values"]
 
@@ -219,7 +228,16 @@ def _parse(con):
             "extra": extra,
         })
 
-    return results
+    # Drop summary/rollup rows that don't carry hourly zone data.
+    # When the run includes monthly aggregation, EnergyPlus appends extra
+    # rows that contain only monthly meters — no zones, no hourly power.
+    # Keeping those would make consumers (e.g. tools.py) treat the last
+    # timestep as "empty building" and produce no recommendations.
+    hourly = [
+        r for r in results
+        if any(info.get("temperature") is not None for info in r["zones"].values())
+    ]
+    return hourly if hourly else results
 
 
 # ---------------------------------------------------------------------------
