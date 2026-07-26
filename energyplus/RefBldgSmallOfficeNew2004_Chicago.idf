@@ -4781,6 +4781,8 @@
 
   Output:Variable,*,Zone Mean Air Temperature,hourly;
 
+  Output:Variable,*,Zone Air Relative Humidity,hourly;
+
 ! ***REPORT TABLES***
 
   OutputControl:Table:Style,
