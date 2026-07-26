@@ -13,6 +13,9 @@ from pathlib import Path
 from dotenv import load_dotenv
 load_dotenv(dotenv_path=Path(__file__).parent / ".env")
 
+from colorama import init, Fore, Style
+init(autoreset=True)
+
 import shutil
 import re
 import pandas as pd
@@ -196,7 +199,7 @@ def modify_idf_based_on_decisions(
         original_idf: path to the baseline IDF
         output_idf: path where the modified IDF will be written
     """
-    print("\n--- Modifying IDF based on agent decisions ---")
+    print(f"\n{Fore.YELLOW + Style.BRIGHT}--- Modifying IDF based on agent decisions ---")
 
     # ---- Step 1: Aggregate decisions ----
     # Count actions per zone, but only for occupied zones (not in low_priority_zones)
@@ -282,7 +285,7 @@ def modify_idf_based_on_decisions(
     # Apply cooling adjustment if changed
     if new_cooling != original_cooling:
         content = replace_in_schedule("CLGSETP_SCH", original_cooling, new_cooling)
-        print(f"  Cooling setpoint: {original_cooling:.1f}°C -> {new_cooling:.1f}°C")
+        print(f"  {Fore.YELLOW + Style.BRIGHT}Cooling setpoint: {original_cooling:.1f}°C -> {new_cooling:.1f}°C")
 
     # Apply heating adjustment if changed
     if new_heating != original_heating:
@@ -359,11 +362,11 @@ def compare_energy(before_csv: Path, after_csv: Path) -> None:
     savings = total_before - total_after
     savings_pct = (savings / total_before) * 100 if total_before != 0 else 0
 
-    print("\n=== ENERGY COMPARISON ===")
-    print(f"Baseline total energy: {total_before:.2f} kWh (assuming kW * timestep count)")
-    print(f"Optimized total energy: {total_after:.2f} kWh")
-    print(f"Energy savings: {savings:.2f} kWh ({savings_pct:.1f}%)")
-    print("=========================\n")
+    print(f"\n{Fore.GREEN + Style.BRIGHT}=== ENERGY COMPARISON ===")
+    print(f"{Fore.GREEN + Style.BRIGHT}Baseline total energy: {total_before:.2f} kWh (assuming kW * timestep count)")
+    print(f"{Fore.GREEN + Style.BRIGHT}Optimized total energy: {total_after:.2f} kWh")
+    print(f"{Fore.GREEN + Style.BRIGHT}Energy savings: {savings:.2f} kWh ({savings_pct:.1f}%)")
+    print(f"{Fore.GREEN + Style.BRIGHT}=========================\n")
 
 
 # ---------- MAIN ORCHESTRATION ----------
@@ -381,9 +384,9 @@ def run_full_loop(agent_mode: str = "mock"):
     # Step 2: Agent decision
     agent = BuildingAgent(mode=agent_mode)
     decision_result = agent.decide()
-    print("\nAgent decision summary:")
-    print(f"Mode: {decision_result['agent_mode']}")
-    print(f"Explanation: {decision_result['agent_explanation']}")
+    print(f"\n{Fore.CYAN + Style.BRIGHT}Agent decision summary:")
+    print(f"{Fore.CYAN + Style.BRIGHT}Mode: {decision_result['agent_mode']}")
+    print(f"{Fore.CYAN + Style.BRIGHT}Explanation: {decision_result['agent_explanation']}")
 
     # Step 3: Optimized simulation
     after_csv = run_optimized(decision_result)
