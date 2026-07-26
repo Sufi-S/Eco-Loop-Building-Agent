@@ -8,9 +8,13 @@ Performs:
 - Compares energy consumption and prints savings
 """
 
+from pathlib import Path
+
+from dotenv import load_dotenv
+load_dotenv(dotenv_path=Path(__file__).parent / ".env")
+
 import shutil
 import re
-from pathlib import Path
 import pandas as pd
 
 # Import project modules
@@ -395,5 +399,5 @@ if __name__ == "__main__":
     # once to confirm, then run the loop.
     inspect_idf_thermostats(IDF_PATH)
 
-    # Now run the full optimization with mock agent
-    run_full_loop(agent_mode="mock")   # change to "bedrock" later
+    # Now run the full optimization with Bedrock agent
+    run_full_loop(agent_mode="bedrock")   # uses AWS_BEARER_TOKEN_BEDROCK from env

@@ -7,9 +7,13 @@ Supports two modes:
            JSON decisions per zone. Falls back to mock on any failure.
 """
 
+from pathlib import Path
+
+from dotenv import load_dotenv
+load_dotenv(dotenv_path=Path(__file__).parent / ".env")
+
 import json
 import re
-from pathlib import Path
 from typing import Optional, Dict, Any
 
 # Attempt to import boto3; if not available, we'll still work in mock mode
