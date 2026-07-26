@@ -3,7 +3,7 @@ agent.py - AI decision-making layer for building energy management.
 
 Supports two modes:
 - MOCK: offline rule-based reasoning using BuildingTools.get_full_recommendation()
-- BEDROCK: calls Anthropic Claude 3 Haiku via AWS Bedrock to reason and output
+- BEDROCK: calls Anthropic Claude Sonnet 4.6 via AWS Bedrock to reason and output
            JSON decisions per zone. Falls back to mock on any failure.
 """
 
@@ -48,19 +48,31 @@ class BuildingAgent:
         self.bedrock_client = None
 
     def _get_bedrock_client(self):
-        """Lazy initialization of Bedrock runtime client."""
+        """Lazy initialization of Bedrock runtime client.
+
+        Uses AWS Bedrock API key authentication via the AWS_BEARER_TOKEN_BEDROCK
+        environment variable. boto3 picks this up automatically for bedrock-runtime
+        calls; it does not need to be passed explicitly into boto3.client().
+        """
         if not BOTO3_AVAILABLE:
             raise ImportError("boto3 is not installed")
         if self.bedrock_client is None:
+            import os
+            api_key = os.environ.get("AWS_BEARER_TOKEN_BEDROCK")
+            if not api_key:
+                raise RuntimeError("AWS_BEARER_TOKEN_BEDROCK environment variable not set")
             try:
-                self.bedrock_client = boto3.client("bedrock-runtime", region_name="us-east-1")
-            except (NoCredentialsError, ClientError) as e:
+                self.bedrock_client = boto3.client(
+                    "bedrock-runtime",
+                    region_name="us-east-1"
+                )
+            except Exception as e:
                 raise RuntimeError(f"Failed to create Bedrock client: {e}")
         return self.bedrock_client
 
     def _call_bedrock(self, prompt: str) -> str:
         """
-        Send a prompt to Claude 3 Haiku via Bedrock and return the response text.
+        Send a prompt to Claude Sonnet 4.6 via Bedrock and return the response text.
 
         Args:
             prompt: The user prompt.
@@ -72,12 +84,12 @@ class BuildingAgent:
             Exception if the API call fails.
         """
         client = self._get_bedrock_client()
-        model_id = "anthropic.claude-3-haiku-20240307-v1:0"
+        model_id = "us.anthropic.claude-sonnet-4-6"
 
-        # Claude 3 messages format
+        # Claude messages format
         body = {
             "anthropic_version": "bedrock-2023-05-31",
-            "max_tokens": 1000,
+            "max_tokens": 1500,
             "temperature": 0.2,
             "messages": [{"role": "user", "content": prompt}]
         }
