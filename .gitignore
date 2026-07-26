@@ -1,0 +1,15 @@
+venv/
+__pycache__/
+*.pyc
+energyplus/output/
+*.eso
+*.mtr
+*.audit
+*.bnd
+*.eio
+*.end
+*.mdd
+*.rdd
+*.shd
+*.dxf
+.env
