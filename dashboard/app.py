@@ -105,41 +105,57 @@ with col3:
 
 st.divider()
 
+# ---------- COLORS (consistent across all charts) ----------
+COLOR_BASELINE = "#1f77b4"   # blue
+COLOR_OPTIMIZED = "#ff7f0e"  # orange (colorblind-distinguishable from blue)
+
+
 # ---------- LINE CHART: TOTAL POWER OVER TIME ----------
 st.subheader("Total Electricity Demand Over Time")
 
 if df_before is not None and df_after is not None:
-    # Create a combined dataframe for plotting, aligning by timestamp if needed.
-    # We'll use Plotly to overlay two traces.
     fig = go.Figure()
 
-    # Add baseline trace
+    # Baseline trace
     fig.add_trace(go.Scatter(
         x=df_before["timestamp"],
         y=df_before["total_power_kw"],
-        mode="lines",
-        name="Baseline",
-        line=dict(color="blue", width=2)
+        mode="lines+markers",
+        name="Baseline (no setpoint change)",
+        line=dict(color=COLOR_BASELINE, width=2),
+        marker=dict(color=COLOR_BASELINE, size=4),
+        legendgroup="baseline",
     ))
 
-    # Add optimized trace
+    # Optimized trace
     fig.add_trace(go.Scatter(
         x=df_after["timestamp"],
         y=df_after["total_power_kw"],
-        mode="lines",
-        name="Optimized",
-        line=dict(color="green", width=2)
+        mode="lines+markers",
+        name="Optimized (LLM-recommended setpoints)",
+        line=dict(color=COLOR_OPTIMIZED, width=2),
+        marker=dict(color=COLOR_OPTIMIZED, size=4),
+        legendgroup="optimized",
     ))
 
     fig.update_layout(
-        xaxis_title="Time",
+        xaxis_title="Hour of design day",
         yaxis_title="Total Power (kW)",
         hovermode="x unified",
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-        margin=dict(l=10, r=10, t=30, b=30),
-        height=400
+        legend=dict(
+            title=dict(text="<b>Run</b>", side="left"),
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="left",
+            x=0,
+            bgcolor="rgba(255,255,255,0.85)",
+            bordercolor="lightgrey",
+            borderwidth=1,
+        ),
+        margin=dict(l=10, r=10, t=70, b=30),
+        height=420,
     )
-
     st.plotly_chart(fig, use_container_width=True)
 else:
     st.info("Not enough data to display power chart.")
@@ -154,7 +170,6 @@ zone_cols = ["temp_CORE_ZN", "temp_PERIMETER_ZN_1"]
 zone_labels = ["Core Zone", "Perimeter Zone 1"]
 
 if df_before is not None and df_after is not None:
-    # Check if these columns exist
     missing = []
     for col in zone_cols:
         if col not in df_before.columns and col not in df_after.columns:
@@ -162,36 +177,47 @@ if df_before is not None and df_after is not None:
     if missing:
         st.warning(f"Some zone columns missing: {missing}. Skipping temperature charts.")
     else:
-        # Create a figure with two subplots (or two separate charts)
         for zone_col, label in zip(zone_cols, zone_labels):
             fig = go.Figure()
-            # Baseline
             if zone_col in df_before.columns:
                 fig.add_trace(go.Scatter(
                     x=df_before["timestamp"],
                     y=df_before[zone_col],
-                    mode="lines",
+                    mode="lines+markers",
                     name=f"Baseline - {label}",
-                    line=dict(color="blue", width=2, dash="dash")
+                    line=dict(color=COLOR_BASELINE, width=2, dash="dash"),
+                    marker=dict(color=COLOR_BASELINE, size=4),
+                    legendgroup="baseline",
                 ))
-            # Optimized
             if zone_col in df_after.columns:
                 fig.add_trace(go.Scatter(
                     x=df_after["timestamp"],
                     y=df_after[zone_col],
-                    mode="lines",
+                    mode="lines+markers",
                     name=f"Optimized - {label}",
-                    line=dict(color="green", width=2)
+                    line=dict(color=COLOR_OPTIMIZED, width=2),
+                    marker=dict(color=COLOR_OPTIMIZED, size=4),
+                    legendgroup="optimized",
                 ))
 
             fig.update_layout(
                 title=f"{label} Temperature",
-                xaxis_title="Time",
+                xaxis_title="Hour of design day",
                 yaxis_title="Temperature (°C)",
                 hovermode="x unified",
-                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-                margin=dict(l=10, r=10, t=40, b=30),
-                height=300
+                legend=dict(
+                    title=dict(text="<b>Run</b>", side="left"),
+                    orientation="h",
+                    yanchor="bottom",
+                    y=1.02,
+                    xanchor="left",
+                    x=0,
+                    bgcolor="rgba(255,255,255,0.85)",
+                    bordercolor="lightgrey",
+                    borderwidth=1,
+                ),
+                margin=dict(l=10, r=10, t=80, b=30),
+                height=340,
             )
             st.plotly_chart(fig, use_container_width=True)
 else:

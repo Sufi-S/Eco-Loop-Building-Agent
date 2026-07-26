@@ -155,25 +155,88 @@ def _parse(con):
         bucket["values"][dict_idx] = value
 
     # Build the result list
-    results = []
-    for time_idx in sorted(by_time.keys()):
+    # ---------------------------------------------------------------------------
+    # Timestamp generation
+    #
+    # EnergyPlus design-day runs have two tricky properties:
+    #
+    #   1. The Year column is 0 for every row (placeholder). We map it to a
+    #      fixed wall-clock year for ISO-8601 output.
+    #   2. hour=24 is written for the END of each design day instead of rolling
+    #      to (day+1, hour=0). We roll it over.
+    #
+    # For multi-design-day runs (this IDF uses Winter + Summer), EnergyPlus
+    # RESTARTS the day counter for each design day, e.g. Winter is Jan 21 and
+    # Summer is also reported as starting on "Jan 21" (with year=0 and a
+    # different month). Naively stamping both with year=2026 produces
+    # timestamps like "2026-01-21..." and "2026-07-21..." which are 6 months
+    # apart on a continuous time axis — that breaks any line chart.
+    #
+    # To get a contiguous 48-hour window we drop monthly rollup rows
+    # first, then build timestamps as a simple linear sequence: row 0 is
+    # the first design day's hour 1, and each subsequent row is exactly
+    # one hour later (regardless of which "season" it represents). The
+    # wall-clock year/month/day is only correct for the FIRST design day;
+    # rows 24+ are stamped on subsequent days of the same month for
+    # plotting convenience.
+    # ---------------------------------------------------------------------------
+    sorted_indices = sorted(by_time.keys())
+    timestamps = []  # built in lock-step with sorted_indices
+
+    # First pass: roll over hour=24 and stamp year=0 -> 2026 for every row.
+    # We also drop monthly rollup rows here so they don't trip the boundary
+    # detection below. Rollup rows in this IDF look like (year=0, day=31,
+    # hour=24, minute=0) — EnergyPlus writes them for monthly aggregation
+    # and they don't carry hourly zone data (the downstream filter would
+    # drop them later, but we want them gone NOW so the (year, month)
+    # boundary detection below fires exactly once, at the real design-day
+    # transition).
+    raw_tuples = []
+    raw_time_indices = []  # SQL TimeIndex for each raw_tuple, parallel list
+    for i, time_idx in enumerate(sorted_indices):
         bucket = by_time[time_idx]
-        year, month, day, hour, minute = bucket["ts"]
-        # Design-day runs often have Year=0. Stamp with a placeholder so the
-        # timestamp is still a valid ISO-8601 string. The dashboard can group
-        # by (month, day, hour) which is what actually matters for design days.
-        if year == 0:
-            year = 2026
-        # EnergyPlus writes hour=24 at the end of a design day rather than
-        # rolling to (day+1, hour=0). Roll it over so the timestamp parses.
-        if hour == 24:
-            hour = 0
-            day += 1
-            # Cheap month rollover for the design days we care about
-            if day > 31:
-                day = 1
-                month += 1
-        timestamp = f"{year:04d}-{month:02d}-{day:02d}T{hour:02d}:{minute:02d}:00"
+        y, mo, d, h, mi = bucket["ts"]
+        # Skip monthly rollup rows: (year=0, day=31, hour=24, minute=0)
+        if y == 0 and d == 31 and h == 24 and mi == 0:
+            continue
+        if y == 0:
+            y = 2026
+        if h == 24:
+            h = 0
+            d += 1
+            # Cheap month rollover for design days we care about (max 31 days)
+            if d > 31:
+                d = 1
+                mo += 1
+        raw_tuples.append((y, mo, d, h, mi))
+        raw_time_indices.append(time_idx)
+
+    # Second pass: build ISO timestamps. Each row is exactly 1 hour after
+    # the previous row, so wall-clock is simply `start_time + i hours`.
+    # The start time is the FIRST design day's date (any month/day works as
+    # long as it's consistent — the two design days are different "seasons"
+    # but we want a single contiguous 48-hour timeline for plotting).
+    if raw_tuples:
+        anchor_y, anchor_mo, anchor_d, anchor_h, _ = raw_tuples[0]
+        # Anchor at (date, hour=0) so the very first row's hour `anchor_h`
+        # is correctly offset. We then add `i` hours per row.
+        from datetime import datetime, timedelta
+        anchor_dt = datetime(anchor_y, anchor_mo, anchor_d, 0, 0)
+        for i, _ in enumerate(raw_tuples):
+            dt = anchor_dt + timedelta(hours=i + anchor_h)
+            timestamps.append(dt.strftime("%Y-%m-%dT%H:%M:%S"))
+    else:
+        timestamps = []
+
+    # Third pass: actually build the result rows
+    # NOTE: zip against raw_time_indices (NOT sorted_indices) because we
+    # dropped rollup rows in the first pass. sorted_indices still contains
+    # them, so zip(sorted_indices, timestamps) would lose the last hourly
+    # row of the second design day.
+    results = []
+    for time_idx, timestamp in zip(raw_time_indices, timestamps):
+        bucket = by_time[time_idx]
+        _, _, _, _, _ = bucket["ts"]
         values = bucket["values"]
 
         # --- per-zone temperatures + humidity ---
@@ -228,11 +291,10 @@ def _parse(con):
             "extra": extra,
         })
 
-    # Drop summary/rollup rows that don't carry hourly zone data.
-    # When the run includes monthly aggregation, EnergyPlus appends extra
-    # rows that contain only monthly meters — no zones, no hourly power.
-    # Keeping those would make consumers (e.g. tools.py) treat the last
-    # timestep as "empty building" and produce no recommendations.
+    # All remaining rows are hourly design-day rows (rollups were filtered
+    # out in the first pass, so the downstream "drop rows without zone
+    # temperature" filter is now redundant — but we keep it as a defensive
+    # backstop in case a future IDF has a different rollup shape).
     hourly = [
         r for r in results
         if any(info.get("temperature") is not None for info in r["zones"].values())
